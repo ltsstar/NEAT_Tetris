@@ -80,10 +80,11 @@ class Game():
         else:
             self.matrix.set_fixed()
             deleted_lines = self.matrix.delete_lines()
-            self.score += deleted_lines
+            self.score += deleted_lines * 500
             self.matrix.create_shape()
             if not self.matrix.can_fall():
                 self.gg = True
+                self.score += self.matrix.losing_value()
                 return 0
 
         #time.sleep(self.speed / 1000)
@@ -360,6 +361,11 @@ class Matrix:
             self.matrix[i] = self.matrix[i - 1]
         self.matrix[0] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
+    def losing_value(self):
+        value = 0
+        for row_index, row in enumerate(self.matrix):
+            value += (row.count(1) + row.count(2)) * 10
+        return value
 
 
 class Shape:

@@ -50,14 +50,12 @@ def eval_fitness(genome):
     for i in range(10): #do 10 games
         tetris_session = tetris.Game()
         tetris_session.start(continous_evaluation, net, False)
-        if tetris_session.score >= 1:
-            print(tetris_session.score)
         score += tetris_session.score
 
-    if tetris_session.score > 30000:
+    if score > 30000:
         return 1
     else:
-        return (tetris_session.score / (tetris_session.score + 30000))
+        return (score / (score + 30000))
 
 def eval_fitness_genomes(genomes):
     fitness = 0
