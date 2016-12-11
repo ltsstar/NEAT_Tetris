@@ -3,10 +3,7 @@ import tetris
 from neat import nn, population, statistics, parallel
 import copy
 import time
-
-# Network inputs and expected outputs.
-xor_inputs = [[0, 0], [0, 1], [1, 0], [1, 1]]
-xor_outputs = [0, 1, 1, 0]
+import pickle
 
 def continous_evaluation(tetris_session, net):
     if not tetris_session.gg:
@@ -63,16 +60,22 @@ def eval_fitness(genome):
         return (tetris_session.score / (tetris_session.score + 30000))
 
 def eval_fitness_genomes(genomes):
+    fitness = 0
     for g in genomes:
         g.fitness = eval_fitness(g)
+        if g.fitness >= fitness:
+            best_genome = g
+    f = open("best_genome.pkl", "wb")
+    pickle.dump(best_genome, f)
+    f.close()
 
 def run():
     local_dir = os.path.dirname(__file__)
     config_path = os.path.join(local_dir, 'neat_tetris_config')
-    pe = parallel.ParallelEvaluator(50, eval_fitness)
+    #pe = parallel.ParallelEvaluator(50, eval_fitness)
     pop = population.Population(config_path)
-    pop.run(pe.evaluate, 1000000)
-    #pop.run(eval_fitness_genomes, 100)
+    #pop.run(pe.evaluate, 1000000)
+    pop.run(eval_fitness_genomes, 100)
 
     print('Number of evaluations: {0}'.format(pop.total_evaluations))
 
