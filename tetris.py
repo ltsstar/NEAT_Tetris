@@ -3,13 +3,14 @@ from tkinter import Canvas, Label, Tk, StringVar
 
 from random import choice
 from collections import Counter
+import time
 
 
 class Game():
     WIDTH = 200
     HEIGHT = 400
 
-    def start(self, continous_evaluation, net):
+    def start(self, continous_evaluation, net, graphical = False):
         '''Starts the game.
 
         Creates a window, a canvas, and a first shape. Binds the event handler.
@@ -29,12 +30,29 @@ class Game():
         # more sense for level to be a result of completed lines?
         self.continous_evaluation = continous_evaluation
         self.net = net
+        self.graphical = graphical
         self.level = 1
         self.score = 0
         self.speed = 10
         self.counter = 0
         self.create_new_game = True
 
+        if graphical:
+            self.start_graphical()
+
+        self.matrix = Matrix()
+        self.gg = False
+        self.created_shapes = 0
+
+
+            #self.root.bind("<Key>", self.handle_events)
+        if graphical:
+            self.graphical_timer()
+            self.root.mainloop()
+        else:
+            self.timer()
+
+    def start_graphical(self):
         self.root = Tk()
         self.root.title("Tetris")
 
@@ -51,15 +69,28 @@ class Game():
             height=Game.HEIGHT)
         self.canvas.pack()
 
-        self.matrix = Matrix()
-        self.gg = False
-        self.created_shapes = 0
-
-        self.root.bind("<Key>", self.handle_events)
-        self.timer()
-        self.root.mainloop()
-
     def timer(self):
+        if self.create_new_game:
+            self.matrix.clear()
+            self.matrix.create_shape()
+            self.create_new_game = False
+
+        if self.matrix.can_fall():
+            self.matrix.fall()
+        else:
+            self.matrix.set_fixed()
+            deleted_lines = self.matrix.delete_lines()
+            self.score += deleted_lines
+            self.matrix.create_shape()
+            if not self.matrix.can_fall():
+                self.gg = True
+                return 0
+
+        #time.sleep(self.speed / 1000)
+        self.continous_evaluation(self, self.net)
+        self.timer()
+
+    def graphical_timer(self):
         '''Every self.speed ms, attempt to cause the current_shape to fall().
 
         If fall() returns False, create a new shape and check if it can fall.
@@ -167,9 +198,24 @@ class Game():
 class Matrix:
     MAX_WIDTH = 10
     MAX_HEIGHT = 20
+    SHAPES = (
+        ("yellow", (0, 0), (1, 0), (0, 1), (1, 1)),  # square
+        ("lightblue", (0, 0), (1, 0), (2, 0), (3, 0)),  # line
+        ("orange", (2, 0), (0, 1), (1, 1), (2, 1)),  # right el
+        ("blue", (0, 0), (0, 1), (1, 1), (2, 1)),  # left el
+        ("green", (0, 1), (1, 1), (1, 0), (2, 0)),  # right wedge
+        ("red", (0, 0), (1, 0), (1, 1), (2, 1)),  # left wedge
+        ("purple", (1, 0), (0, 1), (1, 1), (2, 1)),  # symmetrical wedge
+    )
 
     def __init__(self):
+        '''
+        none -> 0
+        fixed shape -> 1
+        current shapae -> 2
+        '''
         self.matrix = self.create()
+        self.current_shape = []
 
     def create(self):
         matrix = []
@@ -184,6 +230,7 @@ class Matrix:
 
     def clear(self):
         self.matrix = None
+        self.current_shape = []
         self.matrix = self.create()
 
     def get_static_from_boxes(self, canvas):
@@ -197,6 +244,121 @@ class Matrix:
         for box in boxes:
             cords = [int(x / Shape.BOX_SIZE) for x in canvas.coords(box)]
             self.matrix[cords[1]][cords[0]] = 2
+            self.current_shape.append((cords[1], cords[0]))
+
+    def create_shape(self):
+        middle = int(Matrix.MAX_WIDTH / 2)
+        shape = choice(Matrix.SHAPES)
+        self.current_shape = []
+        for box in shape[1:]:
+            self.matrix[box[1]][box[0] + middle] = 2
+            self.current_shape.append((box[1], box[0] + middle))
+
+    def can_move(self, right, down):
+        for row_index, row in enumerate(self.matrix):
+            for column_index, column in enumerate(row):
+                if column == 2:
+                    check_row = row_index + down
+                    check_column = column_index + right
+                    if check_row >= Matrix.MAX_HEIGHT or check_row < 0 or \
+                        check_column >= Matrix.MAX_WIDTH or check_column < 0:
+                        return False
+                    if self.matrix[check_row][check_column] == 1:
+                        return False
+        return True
+
+    def can_fall(self):
+        return self.can_move(0, 1)
+
+    def move(self, right, down):
+        to_move = []
+        for row_index, row in enumerate(self.matrix):
+            for column_index, column in enumerate(row):
+                if column == 2:
+                    to_move.append((row_index, column_index))
+                    self.matrix[row_index][column_index] = 0
+
+        self.current_shape = []
+        for i in to_move:
+            self.matrix[i[0] + down][i[1] + right] = 2
+            self.current_shape.append((i[0] + down, i[1] + right))
+
+    def fall(self):
+        if self.can_fall():
+            return self.move(0, 1)
+
+    def left(self):
+        if self.can_move(-1, 0):
+            return self.move(-1, 0)
+
+    def right(self):
+        if self.can_move(1, 0):
+            return self.move(1, 0)
+
+    def can_rotate(self):
+        '''
+        box[0] represents y
+        box[1] represents x
+        !!!
+        '''
+        pivot = self.current_shape[2]
+        for box in self.current_shape:
+            x_diff = box[1] - pivot[1]
+            y_diff = box[0] - pivot[0]
+            x_move = -x_diff - y_diff
+            y_move = x_diff - y_diff
+            new_pos = (box[0] + y_move, box[1] + x_move)
+            if new_pos[0] >= Matrix.MAX_HEIGHT or new_pos[0] < 0 or new_pos[1] >= Matrix.MAX_WIDTH or new_pos[1] < 0:
+                return False
+            if self.matrix[new_pos[0]][new_pos[1]] == 1:
+                return False
+        return True
+
+    def rotate(self):
+        '''
+        box[0] represents y
+        box[1] represents x
+        !!!
+        '''
+        if not self.can_rotate():
+            return False
+
+        pivot = self.current_shape[2]
+        to_rotate = []
+        for box in self.current_shape:
+            x_diff = box[1] - pivot[1]
+            y_diff = box[0] - pivot[0]
+            x_move = -x_diff - y_diff
+            y_move = x_diff - y_diff
+            new_pos = (box[0] + y_move, box[1] + x_move)
+            to_rotate.append(new_pos)
+            self.matrix[box[0]][box[1]] = 0
+
+        self.current_shape = []
+        for i in to_rotate:
+            self.matrix[i[0]][i[1]] = 2
+            self.current_shape.append((i[0], i[1]))
+
+    def set_fixed(self):
+        for row_index, row in enumerate(self.matrix):
+            for column_index, column in enumerate(row):
+                if column == 2:
+                    self.matrix[row_index][column_index] = 1
+
+        self.current_shape = []
+
+    def delete_lines(self):
+        deletes = 0
+        for row_index, row in enumerate(self.matrix):
+            if row.count(1) == 10:
+                self.delete_line(row_index)
+                deletes += 1
+        return deletes
+
+    def delete_line(self, row_index):
+        for i in range(row_index, 0, -1):
+            self.matrix[i] = self.matrix[i - 1]
+        self.matrix[0] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
 
 
@@ -322,4 +484,4 @@ class Shape:
 
 if __name__ == "__main__":
     game = Game()
-    game.start()
+    game.start(None, None)

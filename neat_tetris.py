@@ -1,6 +1,8 @@
 import os
 import tetris
 from neat import nn, population, statistics, parallel
+import copy
+import time
 
 # Network inputs and expected outputs.
 xor_inputs = [[0, 0], [0, 1], [1, 0], [1, 1]]
@@ -9,50 +11,68 @@ xor_outputs = [0, 1, 1, 0]
 def continous_evaluation(tetris_session, net):
     if not tetris_session.gg:
         inputs = []
-
-        for row_index, row in enumerate(tetris_session.matrix.matrix):
+        #deepcopy is far too slow, make it by our own
+        matrix = []
+        for row in tetris_session.matrix.matrix:
+            matrix.append([])
+            for column in row:
+                matrix[-1].append(column)
+        for row_index, row in enumerate(matrix):
             for column_index, column in enumerate(row):
                 if column == 2:
                     inputs.append(1)
-                    tetris_session.matrix.matrix[row_index][column_index] = 1
+                    matrix[row_index][column_index] = 1
                 else:
                     inputs.append(0)
-        for row in tetris_session.matrix.matrix:
+        for row in matrix:
             for column in row:
                 inputs.append(column)
 
         output = net.serial_activate(inputs)
         if (output[0] > 0.5):  # left
-            tetris_session.current_shape.move(-1, 0)
+            #tetris_session.current_shape.move(-1, 0)
+            tetris_session.matrix.left()
         if (output[1] > 0.5):  # right
-            tetris_session.current_shape.move(1, 0)
+            #tetris_session.current_shape.move(1, 0)
+            tetris_session.matrix.right()
         if (output[2] > 0.5):  # down
-            tetris_session.current_shape.move(0, 1)
+            #tetris_session.current_shape.move(0, 1)
+            tetris_session.matrix.fall()
         if (output[3] > 0.5):  # rotate
-            tetris_session.current_shape.rotate()
+            #tetris_session.current_shape.rotate()
+            tetris_session.matrix.rotate()
     else:
-        tetris_session.root.destroy()
+        #tetris_session.root.destroy()
+        pass
 
 
 def eval_fitness(genome):
     net = nn.create_feed_forward_phenotype(genome)
 
-    tetris_session = tetris.Game()
-    tetris_session.start(continous_evaluation, net)
+    score = 0
+    for i in range(10): #do 10 games
+        tetris_session = tetris.Game()
+        tetris_session.start(continous_evaluation, net, False)
+        if tetris_session.score >= 1:
+            print(tetris_session.score)
+        score += tetris_session.score
 
     if tetris_session.score > 30000:
         return 1
     else:
-        created_shapes_bonus = min((tetris_session.created_shapes / 30) * 0.2, 0.2)
-        return (tetris_session.score / (tetris_session.score + 30000)) * 0.8 + created_shapes_bonus
+        return (tetris_session.score / (tetris_session.score + 30000))
 
+def eval_fitness_genomes(genomes):
+    for g in genomes:
+        g.fitness = eval_fitness(g)
 
 def run():
     local_dir = os.path.dirname(__file__)
     config_path = os.path.join(local_dir, 'neat_tetris_config')
-    pe = parallel.ParallelEvaluator(15, eval_fitness)
+    pe = parallel.ParallelEvaluator(50, eval_fitness)
     pop = population.Population(config_path)
     pop.run(pe.evaluate, 1000000)
+    #pop.run(eval_fitness_genomes, 100)
 
     print('Number of evaluations: {0}'.format(pop.total_evaluations))
 
