@@ -81,6 +81,9 @@ def run():
 
     # Display the most fit genome.
     winner = pop.statistics.best_genome()
+    f = open("best_genome.pkl", "wb")
+    pickle.dump(winner, f)
+    f.close()
     print('\nBest genome:\n{!s}'.format(winner))
 
     # Verify network output against training data.
